@@ -3,7 +3,7 @@
 from transformers import AutoModelForCausalLM, AutoTokenizer, GPTNeoConfig
 import torch
 import os
-import boto3
+import requests
 import urllib.parse
 from urllib.parse import unquote
 import re
@@ -13,13 +13,10 @@ import json
 
 class GPTJModel:
     def __init__(self):
-        # === AWS Credentials (hardcoded for now) ===
-        aws_access_key = "AKIAYEKP5R5RIEAOMXFM"
-        aws_secret_key = "cp2fCUSKcMPOoI7W33Y5WuDIbXx+mu3PXR2FQKX6"
-        region = "ap-south-1"
-        bucket = "mxyvideobucket"  # your S3 bucket name
-        model_prefix = "ai_app/Gen+AI/gpt-neo-125M/"
-        offload_prefix = "ai_app/Gen+AI/offload/"
+        # === CloudFront URL ===
+        cloudfront_url = "https://d3501cutc1ugpi.cloudfront.net/ai_app/Gen+AI/"
+        model_prefix = "gpt-neo-125M/"
+        offload_prefix = "offload/"
 
         
         # === Local temp paths ===
@@ -30,13 +27,9 @@ class GPTJModel:
         os.makedirs(model_path, exist_ok=True)
         os.makedirs(offload_path, exist_ok=True)
 
-        # === Download from S3 ===
-        self._download_s3_folder(
-            aws_access_key, aws_secret_key, region, bucket, model_prefix, model_path
-        )
-        self._download_s3_folder(
-            aws_access_key, aws_secret_key, region, bucket, offload_prefix, offload_path
-        )
+        # === Download from CloudFront ===
+        self._download_cloudfront_folder(cloudfront_url, model_prefix, model_path)
+        self._download_cloudfront_folder(cloudfront_url, offload_prefix, offload_path)
         
         # Ensure config.json exists and has correct model_type
         config_path = os.path.join(model_path, "config.json")
@@ -140,27 +133,37 @@ class GPTJModel:
     #     outputs = self.model.generate(inputs["input_ids"], max_length=100)
     #     return self.tokenizer.decode(outputs[0], skip_special_tokens=True)
 
-    def _download_s3_folder(self, access_key, secret_key, region, bucket, prefix, local_path):
-            print(f"Downloading from S3 bucket {bucket}, prefix {prefix}")
-            os.makedirs(local_path, exist_ok=True)
+    def _download_cloudfront_folder(self, base_url, prefix, local_path):
+        """Download files from CloudFront URL to local directory."""
+        print(f"Downloading from CloudFront URL {base_url}, prefix {prefix}")
+        os.makedirs(local_path, exist_ok=True)
 
-            s3 = boto3.client(
-                "s3",
-                region_name=region,
-                aws_access_key_id=access_key,
-                aws_secret_access_key=secret_key,
-            )
+        # List of files to download
+        files_to_download = [
+            'config.json',
+            'pytorch_model.bin',
+            'tokenizer.json',
+            'tokenizer_config.json',
+            'vocab.json',
+            'merges.txt'
+        ]
 
-            paginator = s3.get_paginator("list_objects_v2")
-            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-                for obj in page.get("Contents", []):
-                    key = obj["Key"]
-                    if key.endswith("/"):  # skip folders
-                        continue
-                    file_name = unquote(key.split("/")[-1])
-                    dest_path = os.path.join(local_path, file_name)
-                    print(f"Downloading {key} to {dest_path}")
-                    s3.download_file(bucket, key, dest_path)
+        for file_name in files_to_download:
+            file_url = f"{base_url}{prefix}{file_name}"
+            dest_path = os.path.join(local_path, file_name)
+            
+            try:
+                print(f"Downloading {file_url} to {dest_path}")
+                response = requests.get(file_url, stream=True)
+                response.raise_for_status()
+                
+                with open(dest_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+            except Exception as e:
+                print(f"Error downloading {file_name}: {str(e)}")
+                continue
 
     def generate_answer(self, question: str):
         if not question or not isinstance(question, str):
