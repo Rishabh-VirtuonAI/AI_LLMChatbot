@@ -15,6 +15,10 @@ def generate_gpt_answer(question: str):
 # Dictionary to track the history of questions asked by users
 asked_questions_history = {}
 
+@app.get("/")
+async def root():
+    return {"Message":"Welcome to the AI Chatbot"}
+
 @app.get("/answer")
 async def get_answer(question: str):
     # First, check if the question has been asked before and store it
