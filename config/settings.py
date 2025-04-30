@@ -3,7 +3,7 @@
 class Settings:
     DB_HOST = "localhost"
     DB_USER = "root"
-    DB_PASSWORD = "1234"
+    DB_PASSWORD = ""
     DB_NAME = "chatbot_db"
 
 settings = Settings()
