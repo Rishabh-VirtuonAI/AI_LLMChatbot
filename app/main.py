@@ -1,5 +1,6 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from random import choice
 from app.db import get_answers_from_db
 from app.gptj_model import gptj
@@ -15,6 +16,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pydantic model for question input
+class Question(BaseModel):
+    question: str
+
 # Function to generate a new answer using GPT
 def generate_gpt_answer(question: str):
     generated_answer = gptj.generate_answer(question)
@@ -28,15 +33,19 @@ async def root():
     return {"Message": "Welcome to the AI Chatbot"}
 
 @app.post("/answer")
-async def get_answer(request: Request):
-    data = await request.json()
-    question = data.get("question")
+async def get_answer(question_data: Question):
+    """
+    Endpoint to get an answer to the provided question.
+    Expects a JSON payload with a "question" field.
+    Example: { "question": "What is AI?" }
+    """
+    question = question_data.question.strip()
 
     if not question:
-        return {"error": "Question parameter is required"}
+        raise HTTPException(status_code=400, detail="Question parameter is required")
 
     # Normalize question for database lookup
-    normalized_question = question.strip().lower()
+    normalized_question = question.lower()
     answers = get_answers_from_db(normalized_question)
 
     if answers:
