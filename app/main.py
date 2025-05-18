@@ -32,7 +32,7 @@ asked_questions_history = {}
 async def root():
     return {"Message": "Welcome to the AI Chatbot"}
 
-@app.post("/answer")
+@app.post("/chatbot_llm/answer")
 async def get_answer(question_data: Question):
     """
     Endpoint to get an answer to the provided question.
